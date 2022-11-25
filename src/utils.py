@@ -1,7 +1,7 @@
 from torch.optim import Adam, AdamW, SGD
 from transformers import get_linear_schedule_with_warmup
 
-def get_optim(model, config):
+def get_optim(model, config, schedule=True):
     # TODO: customized scheduler
     
     optim, lr, warmup, steps = config.split(',')
@@ -18,7 +18,9 @@ def get_optim(model, config):
     else:
         raise NotImplementedError("Not supported optimizer type.")
     
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps)
+    scheduler = None
+    if schedule:
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps)
     
     return optimizer, scheduler
 

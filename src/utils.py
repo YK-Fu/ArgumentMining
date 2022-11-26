@@ -1,5 +1,5 @@
 from torch.optim import Adam, AdamW, SGD
-from transformers import get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup
 
 def get_optim(model, config, schedule=True):
     # TODO: customized scheduler
@@ -20,7 +20,7 @@ def get_optim(model, config, schedule=True):
     
     scheduler = None
     if schedule:
-        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps)
+        scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps, num_cycles=3)
     
     return optimizer, scheduler
 

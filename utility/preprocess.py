@@ -59,4 +59,4 @@ if __name__ == '__main__':
     raw['r_e'] = r_end
 
     raw.drop(to_drop, axis=0, inplace=True)
-    # raw[['id', 'q', 'r', 'q_s', 'q_e', 'r_s', 'r_e', 's']].to_csv(args.out, sep='\t', index=False, quoting=csv.QUOTE_NONE)
+    raw[['id', 'q', 'r', 'q_s', 'q_e', 'r_s', 'r_e', 's']].to_csv(args.out, sep='\t', index=False, quoting=csv.QUOTE_NONE)

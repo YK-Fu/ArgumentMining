@@ -1,6 +1,8 @@
 import pandas as pd
-import torch
 import random
+import math
+
+import torch
 from torch.utils.data import Dataset
 import transformers
 from transformers import BertTokenizer, RobertaTokenizer, LongformerTokenizer
@@ -12,12 +14,23 @@ class ArgumentMiningDataset(Dataset):
     def __init__(self, path, split, batch_size, model='bert-base-uncased'):
         self.data = pd.read_csv(f'{path}/{split}.csv', sep='\t')
         self.split = split
-        self.id = self.data['id'].unique()
+        self.id = []
+        unique_id = self.data['id'].unique()
+        if self.split == 'train':
+            random.shuffle(unique_id)
+
+        self.data_num = len(unique_id)
+        for i in range(self.data_num // batch_size):
+            temp = []
+            for j in range(batch_size):
+                temp.append(unique_id[i * batch_size + j])
+            self.id.append(temp)
+            
 
         if model in ['bert-base-uncased', 'bert-base-cased']:
             self.tokenizer = BertTokenizer.from_pretrained(model)
             self.max_leng = 512
-        elif model in ['roberta-base', 'xlm-roberta-base']:
+        elif model in ['roberta-base']:
             self.tokenizer = RobertaTokenizer.from_pretrained(model)
             self.max_leng = 512
         elif model in ['allenai/longformer-base-4096']:
@@ -29,7 +42,7 @@ class ArgumentMiningDataset(Dataset):
         self.batch_size = batch_size
     
     def __len__(self):
-        return len(self.id) // self.batch_size
+        return self.data_num // self.batch_size
 
     def collate_fn(self, data):
         ID, Q, R, Q_s, Q_e, R_s, R_e = data[0]
@@ -52,9 +65,9 @@ class ArgumentMiningDataset(Dataset):
             TODO (2): valid set should not randomly choose a ground truth, but return all of the ground truth
             TODO (3): inference dataset
         '''
-        ID, Q, R, Y, Q_s, Q_e, R_s, R_e = [], [], [], [], [], [], [], []
+        Q, R, Y, Q_s, Q_e, R_s, R_e = [], [], [], [], [], [], []
 
-        for id in self.id[idx: idx + self.batch_size]:
+        for id in self.id[idx]:
             df = self.data[self.data['id'] == id]
             
             q = df['q'].iloc[0]
@@ -79,14 +92,27 @@ class ArgumentMiningDataset(Dataset):
 
             Q.append(q)
             R.append(r)
-            ID.append(id)
-            
-        return ID, Q, R, Q_s, Q_e, R_s, R_e
+
+        return self.id[idx], Q, R, Q_s, Q_e, R_s, R_e
 
 class ArgumentMiningTestDataset(Dataset):
     def __init__(self, path, batch_size, model='bert-base-uncased'):
-        self.data = pd.read_csv(f'{path}/test.csv', sep='\t')
-        self.id = self.data['id']
+        self.data = pd.read_csv(f'{path}/test.tsv', sep='\t')
+        self.id = []
+        self.data_num = self.data['id'].shape[0]
+
+        for i in range(self.data_num // batch_size):
+            temp = []
+            for j in range(batch_size):
+                temp.append(self.data['id'][i * batch_size + j])
+            self.id.append(temp)
+
+        temp = []
+        for id in self.data['id'][- (self.data_num % batch_size):]:
+            temp.append(id)
+        if temp:
+            self.id.append(temp)
+            
 
         if model in ['bert-base-uncased', 'bert-base-cased']:
             self.tokenizer = BertTokenizer.from_pretrained(model)
@@ -103,7 +129,7 @@ class ArgumentMiningTestDataset(Dataset):
         self.batch_size = batch_size
     
     def __len__(self):
-        return len(self.id) // self.batch_size
+        return math.ceil(self.data_num / self.batch_size)
 
     def collate_fn(self, data):
         ID, Q, R = data[0]
@@ -114,9 +140,9 @@ class ArgumentMiningTestDataset(Dataset):
         return ID, A
 
     def __getitem__(self, idx):
-        ID, Q, R, Y = [], [], [], []
+        Q, R, Y = [], [], []
 
-        for id in self.id[idx: idx + self.batch_size]:
+        for id in self.id[idx]:
             df = self.data[self.data['id'] == id]
             
             q = df['q'].iloc[0]
@@ -127,6 +153,6 @@ class ArgumentMiningTestDataset(Dataset):
             
             Q.append(q)
             R.append(r)
-            ID.append(id)
-            
-        return ID, Q, R
+
+
+        return self.id[idx], Q, R

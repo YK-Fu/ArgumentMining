@@ -58,15 +58,15 @@ def train(args):
                     print('[steps {0}] Query loss: {1:.4f}, Res loss: {2:.4f}'.format(update_time, sum(q_loss) / len(q_loss), sum(r_loss) / len(r_loss)))
                     q_loss = []
                     r_loss = []
-                if update_time % args.eval_step == 0:
-                    model.eval()
-                    print("Validating...", end='\r')
-                    valid_score = valid(model, devloader, devset.tokenizer, f'{args.result_path}/{args.exp_name}')
-                    if valid_score > best_score:
-                        torch.save(model.state_dict(), f'{args.result_path}/best.ckpt')
-                        print("Better validation scores, save model to best.ckpt")
-                        best_score = valid_score
-                    model.train()
+
+        model.eval()
+        print("Validating...", end='\r')
+        valid_score = valid(model, devloader, devset.tokenizer, f'{args.result_path}/{args.exp_name}')
+        if valid_score > best_score:
+            torch.save(model.state_dict(), f'{args.result_path}/best.ckpt')
+            print("Better validation scores, save model to best.ckpt")
+            best_score = valid_score
+        model.train()
 
 def valid(model, devloader, tokenizer, output):
     # TODO: enumerate all acceptable ground truth, and use the best as acc
@@ -123,21 +123,21 @@ def inference(args):
     model = ArgumentModel(args.model).to(args.device)
     model.load_state_dict(torch.load(args.ckpt))
 
-    testset = ArgumentMiningTestDataset(path=args.data_path, batch_size=args.batch_size, model=args.model)
-    devloader = DataLoader(devset, batch_size=1, shuffle=False, collate_fn=testset.collate_fn, num_workers=0)
+    testset = ArgumentMiningTestDataset(path=args.data_path, batch_size=16, model=args.model)
+    testloader = DataLoader(testset, batch_size=1, shuffle=False, collate_fn=testset.collate_fn, num_workers=0)
     
     df_hyp = {'id': [], 'q': [], 'r': []}
     with torch.no_grad():
-        for ID, A in tmux(devloader):
+        for ID, A in tqdm(testloader):
             A = {k: v.to(args.device) for k, v in A.items()}
             Outputs = model(A)
             for i in range(A['input_ids'].size(0)):
-                q_hyp = tokenizer.decode(A['input_ids'][i][Outputs['q_start'][i]: Outputs['q_end'][i] + 1], skip_special_tokens=True)
-                r_hyp = tokenizer.decode(A['input_ids'][i][Outputs['r_start'][i]: Outputs['r_end'][i] + 1], skip_special_tokens=True)
+                q_hyp = testset.tokenizer.decode(A['input_ids'][i][Outputs['q_start'][i]: Outputs['q_end'][i] + 1], skip_special_tokens=True)
+                r_hyp = testset.tokenizer.decode(A['input_ids'][i][Outputs['r_start'][i]: Outputs['r_end'][i] + 1], skip_special_tokens=True)
                 df_hyp['id'].append(ID[i])
-                df_hyp['q'].append(q_hyp)
-                df_hyp['r'].append(r_hyp)
-    pd.DataFrame(df_hyp).to_csv(f'{output}/test_hyp.csv', sep=',', index=False)
+                df_hyp['q'].append(f"\"{q_hyp}\"")
+                df_hyp['r'].append(f"\"{r_hyp}\"")
+    pd.DataFrame(df_hyp).to_csv(f'{args.result_path}/{args.exp_name}/test_hyp.csv', sep=',', index=False)
     print('Done!')
 
 if __name__ == '__main__':
@@ -149,9 +149,8 @@ if __name__ == '__main__':
     parser.add_argument("--epoch", '-e', type=int, default=100, help="Numbers of epoch")
     parser.add_argument("--batch_size", '-bs', type=int, default=16, help="Batch size")
     parser.add_argument("--grad_steps", '-gs', type=int, default=2, help="Gradient accumulation steps, 1080 sucks TAT")
-    parser.add_argument("--optim", type=str, default='AdamW,0.0001,1500,5000', help="optimizer config: \"type,lr,warmup,allsteps\" ex: AdamW,0.0001,1000,2000")
+    parser.add_argument("--optim", type=str, default='AdamW,0.0001,300,3000', help="optimizer config: \"type,lr,warmup,allsteps\" ex: AdamW,0.0001,1000,2000")
     parser.add_argument("--log_step", type=int, default=100, help="log steps")
-    parser.add_argument("--eval_step", type=int, default=400)
     parser.add_argument("--data_path", type=str, default="./data/", help="Path to a data folder containing [train.csv, valid.csv, test.csv]")
     parser.add_argument("--result_path", type=str, default="./result/", help="Path to store ckpt and validation results.")
     parser.add_argument("--ckpt", type=str, default="", help="Path to a model ckpt for initialize the model")

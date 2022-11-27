@@ -3,9 +3,11 @@ from tqdm import tqdm
 import os
 import numpy as np
 import pandas as pd
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+
 from src.model import ArgumentModel
 from src.utils import longestCommonSubsequence, get_optim
 from src.dataset import ArgumentMiningDataset, ArgumentMiningTestDataset
@@ -30,10 +32,10 @@ def train(args):
     r_loss = []
 
     for e in range(args.epoch):
-        for _, A, Q_s, Q_e, R_s, R_e in tqdm(trainloader):    
+        for _, A, S in tqdm(trainloader):    
             A = {k: v.to(args.device) for k, v in A.items()}
-
-            Outputs = model(A, Q_s, Q_e, R_s, R_e)
+            
+            Outputs = model(A, S)
             loss = (Outputs['q_loss'] + Outputs['r_loss']) / args.grad_steps
             loss.backward()
             del loss
@@ -75,11 +77,16 @@ def valid(model, devloader, tokenizer, output):
     with torch.no_grad():
         q_acc = []
         r_acc = []
-        for ID, A, Q_s, Q_e, R_s, R_e in devloader:
+        for ID, A, S in devloader:
             A = {k: v.to(args.device) for k, v in A.items()}
-            Outputs = model(A)        
+            
+
+            Outputs = model(A)
 
             for i in range(A['input_ids'].size(0)):
+                Q_s, Q_e, R_s, R_e = S[i].split([1, 1, 1, 1], -1)
+                Q_s, Q_e, R_s, R_e = Q_s.squeeze(-1), Q_e.squeeze(-1), R_s.squeeze(-1), R_e.squeeze(-1)
+                
                 q_hyp = tokenizer.decode(A['input_ids'][i][Outputs['q_start'][i]: Outputs['q_end'][i] + 1], skip_special_tokens=True)
                 r_hyp = tokenizer.decode(A['input_ids'][i][Outputs['r_start'][i]: Outputs['r_end'][i] + 1], skip_special_tokens=True)
                 df_hyp['id'].append(ID[i])
@@ -88,9 +95,9 @@ def valid(model, devloader, tokenizer, output):
 
                 q_max_acc = 0
                 r_max_acc = 0
-                for j in range(len(Q_s[i])):
-                    q_tgt = tokenizer.decode(A['input_ids'][i][Q_s[i][j]: Q_e[i][j] + 1], skip_special_tokens=True)
-                    r_tgt = tokenizer.decode(A['input_ids'][i][R_s[i][j]: R_e[i][j] + 1], skip_special_tokens=True)
+                for j in range(Q_s.size(0)):
+                    q_tgt = tokenizer.decode(A['input_ids'][i][Q_s[j]: Q_e[j] + 1], skip_special_tokens=True)
+                    r_tgt = tokenizer.decode(A['input_ids'][i][R_s[j]: R_e[j] + 1], skip_special_tokens=True)
                     df_ref['id'].append(ID[i])
                     df_ref['q'].append(q_tgt)
                     df_ref['r'].append(r_tgt)

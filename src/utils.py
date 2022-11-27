@@ -20,7 +20,7 @@ def get_optim(model, config, schedule=True):
     
     scheduler = None
     if schedule:
-        scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps, num_cycles=3)
+        scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps, num_cycles=3)
     
     return optimizer, scheduler
 

@@ -44,7 +44,7 @@ class ArgumentMiningDataset(Dataset):
             self.model = 'roberta'
             self.sep = '</s></s>'
             self.offset = 9
-            self.max_leng = 4096
+            self.max_leng = 2048
         else:
             raise NotImplementedError("Not supported pretrained model type.")
         
@@ -65,13 +65,13 @@ class ArgumentMiningDataset(Dataset):
                 continue
             
             if o[0] == span[0] and Q_mapped_e < 0:
-                Q_mapped_s = j + 1
+                Q_mapped_s = j
             if o[0] == span[2] and Q_mapped_e > 0 and R_mapped_e < 0:
-                R_mapped_s = j + 1
+                R_mapped_s = j
             if o[1] == span[1] and Q_mapped_s >= 0 and R_mapped_s < 0:
-                Q_mapped_e = j + 1
+                Q_mapped_e = j
             if o[1] == span[3] and R_mapped_s >= 0:
-                R_mapped_e = j + 1
+                R_mapped_e = j
                 break
 
         answer = [Q_mapped_s, Q_mapped_e, R_mapped_s, R_mapped_e]

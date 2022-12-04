@@ -39,12 +39,12 @@ class ArgumentMiningDataset(Dataset):
             self.sep = '</s></s>'
             self.offset = 9
             self.max_leng = 512
-        elif model in ['allenai/longformer-base-4096']:
+        elif model in ['allenai/longformer-base-4096', 'allenai/longformer-large-4096']:
             self.tokenizer = LongformerTokenizerFast.from_pretrained(model)
             self.model = 'roberta'
             self.sep = '</s></s>'
             self.offset = 9
-            self.max_leng = 2048
+            self.max_leng = 3000
         else:
             raise NotImplementedError("Not supported pretrained model type.")
         
@@ -79,7 +79,7 @@ class ArgumentMiningDataset(Dataset):
         return answer
             
     def collate_fn(self, data):
-        return data[0][0], data[0][1], data[0][2]
+        return data[0][0], data[0][1], data[0][2], data[0][3]
 
     def __getitem__(self, idx):
         '''
@@ -102,14 +102,11 @@ class ArgumentMiningDataset(Dataset):
             q = str(y) + self.sep + q
             Q.append(q)
             R.append(r)
-            if self.split == 'train':
-                i = random.randint(0, df.shape[0] - 1)
-                S.append([df['q_s'][i] + self.offset, df['q_e'][i] + self.offset, df['r_s'][i], df['r_e'][i]])
-            else:
-                all_span = []
-                for q_s, q_e, r_s, r_e in df[['q_s', 'q_e', 'r_s', 'r_e']].values.tolist():
-                    all_span.append([q_s + self.offset, q_e + self.offset, r_s, r_e])
-                S.append(all_span)
+
+            all_span = []
+            for q_s, q_e, r_s, r_e in df[['q_s', 'q_e', 'r_s', 'r_e']].values.tolist():
+                all_span.append([q_s + self.offset, q_e + self.offset, r_s, r_e])
+            S.append(all_span)
 
         A = self.tokenizer(Q, R, 
                 padding='longest', 
@@ -125,29 +122,19 @@ class ArgumentMiningDataset(Dataset):
         
         TS = []
         offset_mapping = A.pop('offset_mapping')
-        if self.split == 'train':
-            for id, mapping, s in zip(self.id[idx], offset_mapping, S):
+        for mapping , all_s in zip(offset_mapping, S):
+            temp_s = []
+            for s in all_s:
                 ts = self.convert_answer(mapping, s)
-                
                 if ts[0] == ts[1] == -1 or ts[2] == ts[3] == -1:
                     ts = [-1] * 4
-                TS.append(ts)
-                
-            TS = torch.LongTensor(TS)
-        else:
-            for mapping , all_s in zip(offset_mapping, S):
-                temp_s = []
-                for s in all_s:
-                    ts = self.convert_answer(mapping, s)
-                    if ts[0] == ts[1] == -1 or ts[2] == ts[3] == -1:
-                        ts = [-1] * 4
-                    temp_s.append(ts)
+                temp_s.append(ts)
 
-                TS.append(temp_s)
-            TS = [torch.LongTensor(ts) for ts in TS]
+            TS.append(temp_s)
+        TS = [torch.LongTensor(ts) for ts in TS]
         
         
-        return self.id[idx], A, TS
+        return self.id[idx], A, TS, offset_mapping
 
 class ArgumentMiningTestDataset(Dataset):
     def __init__(self, path, batch_size, model='bert-base-uncased'):
@@ -206,7 +193,7 @@ class ArgumentMiningTestDataset(Dataset):
         return math.ceil(self.data_num / self.batch_size)
 
     def collate_fn(self, data):
-        return data[0][0], data[0][1]
+        return data[0][0], data[0][1], data[0][2]
 
     def __getitem__(self, idx):
         '''
@@ -238,7 +225,7 @@ class ArgumentMiningTestDataset(Dataset):
 
         if self.model == 'bert':
             A.token_type_ids[:, :2] = 1
-        A.pop('offset_mapping')
+        offset_mapping = A.pop('offset_mapping')
         
-        return self.id[idx], A
+        return self.id[idx], A, offset_mapping
 

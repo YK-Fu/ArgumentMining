@@ -1,26 +1,29 @@
+import torch
 from torch.optim import Adam, AdamW, SGD
 from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup
 
-def get_optim(model, config, schedule=True):
-    # TODO: customized scheduler
-    
-    optim, lr, warmup, steps = config.split(',')
-    lr = float(lr)
-    warmup = int(warmup)
-    steps = int(steps)
+def get_optim(parameter, optim_cfg, schedule_cfg):
+    optim, lr, momentum = optim_cfg.split(',')
+    scheduler, warmup, steps, cycles = schedule_cfg.split(',')
 
     if optim == 'AdamW':
-        optimizer = AdamW(model.parameters(), lr)
+        optimizer = AdamW(parameter, float(lr))
     elif optim == 'Adam':
-        optimizer = Adam(model.parameters(), lr)
+        optimizer = Adam(parameter, float(lr))
     elif optim == 'SGD':
-        optimizer = SGD(model.parameters(), lr)
+        optimizer = SGD(parameter, float(lr), momentum=float(momentum))
     else:
         raise NotImplementedError("Not supported optimizer type.")
-    
-    scheduler = None
-    if schedule:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps, num_cycles=3)
+
+    if scheduler == 'linear':
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(warmup), num_training_steps=int(steps))
+    elif scheduler == 'cosine_warmup':    
+        scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=int(warmup), num_training_steps=int(steps), num_cycles=int(cycles))
+    elif scheduler == 'cosine_warmup_start':
+        scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=int(warmup), num_training_steps=int(steps), num_cycles=int(cycles))
+    else:
+        scheduler = None
+        print("WARMING: not supported scheduler type, optimize withou scheduler.")
     
     return optimizer, scheduler
 
@@ -35,3 +38,17 @@ def longestCommonSubsequence(text1: list, text2: list) -> int:
             else:
                 lcs[i % 2][j] = max(lcs[(i-1) % 2][j], lcs[i % 2][j-1])
     return lcs[len(text1) % 2][len(text2)]
+
+def is_q(input_ids, offset_mapping):
+    q = torch.zeros(input_ids.size(), dtype=bool)
+    
+    for i in range(input_ids.size(0)):
+        time = 0
+        for j in range(input_ids.size(1)):
+            if offset_mapping[i][j][0] == offset_mapping[i][j][1] == 0:
+                time += 1
+            if time == 2:
+                q[i][2: j] = True
+                break
+
+    return q

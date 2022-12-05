@@ -1,10 +1,9 @@
 import sys
 import pandas as pd
 import csv
-'''
-    Preprocess start and end indices of given tokenizer (character level)
-    TODO: clean the input data
-'''
+
+# Preprocess start and end indices (character level)
+
 if __name__ == '__main__':
     data_path, output_path = sys.argv[1], sys.argv[2]
     

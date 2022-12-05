@@ -39,12 +39,12 @@ class ArgumentMiningDataset(Dataset):
             self.sep = '</s></s>'
             self.offset = 9
             self.max_leng = 512
-        elif model in ['allenai/longformer-base-4096']:
+        elif model in ['allenai/longformer-base-4096', 'allenai/longformer-large-4096']:
             self.tokenizer = LongformerTokenizerFast.from_pretrained(model)
             self.model = 'roberta'
             self.sep = '</s></s>'
             self.offset = 9
-            self.max_leng = 2048
+            self.max_leng = 3000
         else:
             raise NotImplementedError("Not supported pretrained model type.")
         
@@ -79,7 +79,7 @@ class ArgumentMiningDataset(Dataset):
         return answer
             
     def collate_fn(self, data):
-        return data[0][0], data[0][1], data[0][2]
+        return data[0][0], data[0][1], data[0][2], data[0][3]
 
     def __getitem__(self, idx):
         '''
@@ -147,7 +147,7 @@ class ArgumentMiningDataset(Dataset):
             TS = [torch.LongTensor(ts) for ts in TS]
         
         
-        return self.id[idx], A, TS
+        return self.id[idx], A, TS, offset_mapping
 
 class ArgumentMiningTestDataset(Dataset):
     def __init__(self, path, batch_size, model='bert-base-uncased'):
@@ -191,7 +191,7 @@ class ArgumentMiningTestDataset(Dataset):
             self.sep = '</s></s>'
             self.offset = 9
             self.max_leng = 512
-        elif model in ['allenai/longformer-base-4096']:
+        elif model in ['allenai/longformer-base-4096', 'allenai/longformer-large-4096']:
             self.tokenizer = LongformerTokenizerFast.from_pretrained(model)
             self.model = 'roberta'
             self.sep = '</s></s>'
@@ -206,7 +206,7 @@ class ArgumentMiningTestDataset(Dataset):
         return math.ceil(self.data_num / self.batch_size)
 
     def collate_fn(self, data):
-        return data[0][0], data[0][1]
+        return data[0][0], data[0][1], data[0][2]
 
     def __getitem__(self, idx):
         '''
@@ -238,7 +238,7 @@ class ArgumentMiningTestDataset(Dataset):
 
         if self.model == 'bert':
             A.token_type_ids[:, :2] = 1
-        A.pop('offset_mapping')
+        offset_mapping = A.pop('offset_mapping')
         
-        return self.id[idx], A
+        return self.id[idx], A, offset_mapping
 

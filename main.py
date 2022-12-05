@@ -3,6 +3,7 @@ from tqdm import tqdm
 import os
 import numpy as np
 import pandas as pd
+from nltk.tokenize import word_tokenize
 
 import torch
 import torch.nn as nn
@@ -17,7 +18,14 @@ np.random.seed(4096)
 
 def train(args):
     model = ArgumentModel(args.model).to(args.device)
-    optimizer, scheduler = get_optim(model, args.optim, True)
+    
+    if args.optim2 is not None:
+        optimizer, scheduler = get_optim(model.encoder.parameters(), args.optim, args.scheduler)
+        optimizer2, scheduler2 = get_optim(list(model.span_tagging.parameters()) + list(model.proj.parameters()), args.optim2, args.scheduler2)
+        # optimizer2, scheduler2 = get_optim(model.span_tagging.parameters(), args.optim2, args.scheduler2)
+    else:
+        optimizer, scheduler = get_optim(model.parameters(), args.optim, args.scheduler)
+        optimizer2, scheduler2 = None, None
     
     trainset = ArgumentMiningDataset(path=args.data_path, split='train', batch_size=args.batch_size, model=args.model)
     devset = ArgumentMiningDataset(path=args.data_path, split='valid', batch_size=args.batch_size, model=args.model)
@@ -32,7 +40,7 @@ def train(args):
     r_loss = []
 
     for e in range(args.epoch):
-        for _, A, S in tqdm(trainloader):    
+        for _, A, S, _ in tqdm(trainloader):    
             A = {k: v.to(args.device) for k, v in A.items()}
             
             Outputs = model(A, S)
@@ -43,19 +51,25 @@ def train(args):
             # log span loss
             q_loss.append(Outputs['q_loss'].item())
             r_loss.append(Outputs['r_loss'].item())
-            
 
             steps += 1
             if steps % args.grad_steps == 0:
                 update_time += 1
 
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+                
                 optimizer.step()
                 optimizer.zero_grad()
-                
+
                 if scheduler:
                     scheduler.step()
 
+                if optimizer2 is not None:
+                    optimizer2.step()
+                    optimizer2.zero_grad()
+                    if scheduler2 is not None:
+                        scheduler2.step()
+                
                 if update_time % args.log_step == 0:
                     print('[steps {0}] Query loss: {1:.4f}, Res loss: {2:.4f}'.format(update_time, sum(q_loss) / len(q_loss), sum(r_loss) / len(r_loss)))
                     q_loss = []
@@ -65,21 +79,20 @@ def train(args):
         print("Validating...", end='\r')
         valid_score = valid(model, devloader, devset.tokenizer, f'{args.result_path}/{args.exp_name}')
         if valid_score > best_score:
-            torch.save(model.state_dict(), f'{args.result_path}/best.ckpt')
-            print("Better validation scores, save model to best.ckpt")
+            torch.save(model.state_dict(), f'{args.result_path}/{args.exp_name}/best.ckpt')
+            print(f"Better validation scores, save model to {args.result_path}/{args.exp_name}/best.ckpt")
             best_score = valid_score
         model.train()
+    print(f"Best scores: {best_score}")
 
 def valid(model, devloader, tokenizer, output):
-    # TODO: enumerate all acceptable ground truth, and use the best as acc
     df_hyp = {'id': [], 'q': [], 'r': []}
     df_ref = {'id': [], 'q': [], 'r': []}
     with torch.no_grad():
         q_acc = []
         r_acc = []
-        for ID, A, S in devloader:
+        for ID, A, S, mapping in devloader:
             A = {k: v.to(args.device) for k, v in A.items()}
-            
 
             Outputs = model(A)
 
@@ -89,6 +102,10 @@ def valid(model, devloader, tokenizer, output):
                 
                 q_hyp = tokenizer.decode(A['input_ids'][i][Outputs['q_start'][i]: Outputs['q_end'][i] + 1], skip_special_tokens=True)
                 r_hyp = tokenizer.decode(A['input_ids'][i][Outputs['r_start'][i]: Outputs['r_end'][i] + 1], skip_special_tokens=True)
+
+                q_hyp = ' '.join(word_tokenize(q_hyp))
+                r_hyp = ' '.join(word_tokenize(r_hyp))
+
                 df_hyp['id'].append(ID[i])
                 df_hyp['q'].append(q_hyp)
                 df_hyp['r'].append(r_hyp)
@@ -98,6 +115,9 @@ def valid(model, devloader, tokenizer, output):
                 for j in range(Q_s.size(0)):
                     q_tgt = tokenizer.decode(A['input_ids'][i][Q_s[j]: Q_e[j] + 1], skip_special_tokens=True)
                     r_tgt = tokenizer.decode(A['input_ids'][i][R_s[j]: R_e[j] + 1], skip_special_tokens=True)
+                    q_tgt = ' '.join(word_tokenize(q_tgt))
+                    r_tgt = ' '.join(word_tokenize(r_tgt))
+                    
                     df_ref['id'].append(ID[i])
                     df_ref['q'].append(q_tgt)
                     df_ref['r'].append(r_tgt)
@@ -135,12 +155,15 @@ def inference(args):
     
     df_hyp = {'id': [], 'q': [], 'r': []}
     with torch.no_grad():
-        for ID, A in tqdm(testloader):
+        for ID, A, mapping in tqdm(testloader):
             A = {k: v.to(args.device) for k, v in A.items()}
             Outputs = model(A)
             for i in range(A['input_ids'].size(0)):
                 q_hyp = testset.tokenizer.decode(A['input_ids'][i][Outputs['q_start'][i]: Outputs['q_end'][i] + 1], skip_special_tokens=True)
                 r_hyp = testset.tokenizer.decode(A['input_ids'][i][Outputs['r_start'][i]: Outputs['r_end'][i] + 1], skip_special_tokens=True)
+                q_hyp = ' '.join(word_tokenize(q_hyp))
+                r_hyp = ' '.join(word_tokenize(r_hyp))
+
                 df_hyp['id'].append(ID[i])
                 df_hyp['q'].append(f"\"{q_hyp}\"")
                 df_hyp['r'].append(f"\"{r_hyp}\"")
@@ -153,20 +176,23 @@ if __name__ == '__main__':
     parser.add_argument("--mode", '-m', type=str, required=True, help="Train or inference")
     parser.add_argument("--model", type=str, default="bert-base-uncased", help="Pretrained model name")
     parser.add_argument("--device", '-d', type=str, default="cuda:0", help="Training on which device")
-    parser.add_argument("--epoch", '-e', type=int, default=100, help="Numbers of epoch")
-    parser.add_argument("--batch_size", '-bs', type=int, default=16, help="Batch size")
-    parser.add_argument("--grad_steps", '-gs', type=int, default=2, help="Gradient accumulation steps, 1080 sucks TAT")
-    parser.add_argument("--optim", type=str, default='AdamW,0.0001,300,3000', help="optimizer config: \"type,lr,warmup,allsteps\" ex: AdamW,0.0001,1000,2000")
+    parser.add_argument("--epoch", '-e', type=int, default=20, help="Numbers of epoch")
+    parser.add_argument("--batch_size", '-bs', type=int, default=1, help="Batch size")
+    parser.add_argument("--grad_steps", '-gs', type=int, default=32, help="Gradient accumulation steps, 1080 sucks TAT")
+    parser.add_argument("--optim", type=str, default='AdamW,0.00001,', help="optimizer config: \"type,lr,momentum\" ex: AdamW,0.0001,,")
+    parser.add_argument("--optim2", type=str, default='SGD,0.01,0.9', help="optimizer for downstream model, if None, use the same optimizer with upstream")
+    parser.add_argument("--scheduler", type=str, default='cosine_warmup,500,6000,3', help="scheduler config: \"type,warmup,allsteps,num_cycles\" ex: cosine_warmup,1000,2000,2")
+    parser.add_argument("--scheduler2", type=str, default='cosine_warmup,200,6000,3', help="scheduler for downstream model, if None, not used during optimization")
     parser.add_argument("--log_step", type=int, default=100, help="log steps")
     parser.add_argument("--data_path", type=str, default="./data/", help="Path to a data folder containing [train.csv, valid.csv, test.csv]")
-    parser.add_argument("--result_path", type=str, default="./result/", help="Path to store ckpt and validation results.")
+    parser.add_argument("--result_path", type=str, default="./result", help="Path to store ckpt and validation results.")
     parser.add_argument("--ckpt", type=str, default="", help="Path to a model ckpt for initialize the model")
     args = parser.parse_args()
     
     if not os.path.exists(args.result_path):
         os.makedirs(args.result_path)
-        if not os.path.exists(f'{args.result_path}/{args.exp_name}'):
-            os.makedirs(f'{args.result_path}/{args.exp_name}')
+    if not os.path.exists(f'{args.result_path}/{args.exp_name}'):
+        os.makedirs(f'{args.result_path}/{args.exp_name}')
 
     if args.mode == 'train':
         train(args)

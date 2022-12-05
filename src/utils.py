@@ -1,28 +1,31 @@
 from torch.optim import Adam, AdamW, SGD
 from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup
 
-def get_optim(model, config, schedule=True):
-    # TODO: customized scheduler
-    
-    optim, lr, warmup, steps = config.split(',')
-    lr = float(lr)
-    warmup = int(warmup)
-    steps = int(steps)
+def get_optim(parameter, optim_cfg, schedule_cfg):
+    optim, lr, momentum = optim_cfg.split(',')
+    scheduler, warmup, steps, cycles = schedule_cfg.split(',')
 
     if optim == 'AdamW':
-        optimizer = AdamW(model.parameters(), lr)
+        optimizer = AdamW(parameter, float(lr))
     elif optim == 'Adam':
-        optimizer = Adam(model.parameters(), lr)
+        optimizer = Adam(parameter, float(lr))
     elif optim == 'SGD':
-        optimizer = SGD(model.parameters(), lr)
+        optimizer = SGD(parameter, float(lr), momentum=float(momentum))
     else:
         raise NotImplementedError("Not supported optimizer type.")
-    
-    scheduler = None
-    if schedule:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_training_steps=steps, num_cycles=3)
+
+    if scheduler == 'linear':
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(warmup), num_training_steps=int(steps))
+    elif scheduler == 'cosine_warmup':    
+        scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=int(warmup), num_training_steps=int(steps), num_cycles=int(cycles))
+    elif scheduler == 'cosine_warmup_start':
+        scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=int(warmup), num_training_steps=int(steps), num_cycles=int(cycles))
+    else:
+        scheduler = None
+        print("WARMING: not supported scheduler type, optimize withou scheduler.")
     
     return optimizer, scheduler
+
 
 def longestCommonSubsequence(text1: list, text2: list) -> int:
     if len(text2) > len(text1):

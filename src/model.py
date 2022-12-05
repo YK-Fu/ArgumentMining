@@ -12,14 +12,21 @@ class ArgumentModel(nn.Module):
         elif model in ['roberta-base']:
             self.encoder = RobertaModel.from_pretrained(model)
             self.max_leng = 512
-        elif model in ['allenai/longformer-base-4096']:
+        elif model in ['allenai/longformer-base-4096', 'allenai/longformer-large-4096']:
             self.encoder = LongformerModel.from_pretrained(model)
-            self.max_leng = 4096
+            self.max_leng = 3000
         else:
             raise NotImplementedError("Not supported pretrained model type.")
-
+        
+        if 'large' in model:
+            self.hidden = 1024
+        else:
+            self.hidden = 768
+        # 0: other, 1: in query span, 2: in response span
+        self.span_tagging = nn.LSTM(self.hidden, hidden_size=128, bidirectional=True, num_layers=1, batch_first=True)    
+        self.proj = nn.Linear(128 * 2, 4)
         # Will q_tagging and r_tagging share the same model be better?
-        self.span_tagging = nn.Linear(768, 4)          # predict the start and end tokens of query
+        # self.span_tagging = nn.Linear(self.hidden, 4)          # predict the start and end tokens of query
                                     
 
     def cal_tagging_loss(self, span_logits, start, end):
@@ -47,7 +54,11 @@ class ArgumentModel(nn.Module):
 
         a = self.encoder(**A).last_hidden_state
         
-        span_logits = self.span_tagging(a).squeeze(-1).contiguous()   # the start and end token logits of response
+        # for LSTM
+        h, _ = self.span_tagging(a)
+        span_logits = self.proj(h).squeeze(-1).contiguous()
+        
+        # span_logits = self.span_tagging(a).squeeze(-1).contiguous()   # the start and end token logits of response
         q_span_logits, r_span_logits = span_logits.split([2, 2], -1)
         
         Outputs = dict()

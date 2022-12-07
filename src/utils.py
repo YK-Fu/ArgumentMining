@@ -38,3 +38,13 @@ def longestCommonSubsequence(text1: list, text2: list) -> int:
             else:
                 lcs[i % 2][j] = max(lcs[(i-1) % 2][j], lcs[i % 2][j-1])
     return lcs[len(text1) % 2][len(text2)]
+
+def q_leng(input_ids, offset_mapping):
+    leng = []
+    for i in range(input_ids.size(0)):
+        for j in range(1, input_ids.size(1)):
+            if offset_mapping[i][j][0] == offset_mapping[i][j][1] == 0:
+                leng.append(j)
+                break
+
+    return leng

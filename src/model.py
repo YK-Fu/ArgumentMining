@@ -40,7 +40,7 @@ class ArgumentModel(nn.Module):
 
         start_logits, end_logits = span_logits.split([1, 1], -1)
 
-        loss_fct = nn.CrossEntropyLoss()
+        loss_fct = nn.CrossEntropyLoss(label_smoothing=0.1)
         start_loss = loss_fct(start_logits.squeeze(-1), start)
 
         end_loss = loss_fct(end_logits.squeeze(-1), end)
@@ -68,9 +68,9 @@ class ArgumentModel(nn.Module):
             Outputs['r_loss'] = self.cal_tagging_loss(r_span_logits, R_s.squeeze(-1), R_e.squeeze(-1))
         
         # parse span results
-        Outputs['q_start'] = torch.argmax(q_span_logits[:, :, 0], -1).tolist()
-        Outputs['q_end'] = torch.argmax(q_span_logits[:, :, 1], -1).tolist()
-        Outputs['r_start'] = torch.argmax(r_span_logits[:, :, 0], -1).tolist()
-        Outputs['r_end'] = torch.argmax(r_span_logits[:, :, 1], -1).tolist()
+        Outputs['q_start'] = torch.argmax(q_span_logits[:, :, 0], -1)
+        Outputs['q_end'] = torch.argmax(q_span_logits[:, :, 1], -1)
+        Outputs['r_start'] = torch.argmax(r_span_logits[:, :, 0], -1)
+        Outputs['r_end'] = torch.argmax(r_span_logits[:, :, 1], -1)
         
         return Outputs

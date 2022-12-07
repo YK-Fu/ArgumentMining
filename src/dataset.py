@@ -11,8 +11,8 @@ random.seed(4096)
 transformers.logging.set_verbosity_error()
 
 class ArgumentMiningDataset(Dataset):
-    def __init__(self, path, split, batch_size, model='bert-base-uncased'):
-        self.data = pd.read_csv(f'{path}/{split}.csv', sep='\t')
+    def __init__(self, path, split, id, batch_size, model='bert-base-uncased'):
+        self.data = pd.read_csv(f'{path}/sub{split}_{id}.csv', sep='\t')
         self.split = split
         self.id = []
         unique_id = self.data['id'].unique()
@@ -191,7 +191,7 @@ class ArgumentMiningTestDataset(Dataset):
             self.sep = '</s></s>'
             self.offset = 9
             self.max_leng = 512
-        elif model in ['allenai/longformer-base-4096', 'allenai/longformer-large-4096']:
+        elif model in ['allenai/longformer-base-4096', 'allenai/longformer-large-4096', 'valhalla/longformer-base-4096-finetuned-squadv1']:
             self.tokenizer = LongformerTokenizerFast.from_pretrained(model)
             self.model = 'roberta'
             self.sep = '</s></s>'

@@ -2,30 +2,47 @@
 
 ## Preporcess
 
-Calculate the start/end indices given BERT tokenizer (or other pretrained LM tokenizer)
+Calculate the start/end indices in character-level
 ```
-cd utility
-python preprocess.py --model <model_name> --data_path <path_to_raw_data> --out <path_to_output_data> 
+python utility/preprocess.py <path_to_raw_data> <path_to_output_data> 
 ```
 
-Split data into train and valid set
+Split data into train and valid set, output_path is the target folder
 ```
-cd utility
-python split_data.py <data_path> <output_path>
+python utility/split_data.py <data_path> <output_path>
 ```
 
 ## Training
-Information about arguments is listed in main.py, note that the model name must be the same with that you used in preprocess.
+The data_path is a folder containing two preprocessed csv files named train.csv and valid.csv. Information about arguments is listed in main.py
 ```
 python main.py \
+        --name <exp_name>
         --mode train \
         --data_path <path_to_data> \
         --model <model_name> \
         --epoch <num_epoch> \
         --batch_size <batch_size> \
-        --grad_steps <gradient_accumulation_steps> \
-        --optim AdamW,0.0001,1500,5000 \
 ```
 
 ## Inference
-TODO
+The data_path is a folder containing raw data of testing csv files name test.csv.
+```
+python main.py \
+        --name <exp_name>
+        --mode inference \
+        --data_path <path_to_data> \
+        --model <model_name> \
+        --ckpt <path_to_checkpoint> \
+```
+
+## Ensemble
+The checkpoints should be placed in <result_path>/subset_{i}/best.ckpt, where i is the index of subset.
+```
+python main.py \
+        --name <exp_name>
+        --mode ensemble \
+        --data_path <path_to_data> \
+        --model <model_name> \
+        --result_path <folder_to_ckpt> \
+        
+```
